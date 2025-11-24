@@ -3,49 +3,68 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Search, X, CloudSun, CloudRain, Sun, Cloud, 
-  Wind, Umbrella, Trophy, ArrowRight, MapPin, Loader2, AlertCircle, Settings 
+  Wind, Umbrella, Trophy, ArrowRight, MapPin, Loader2, AlertCircle, Settings, FileText, ChevronLeft
 } from 'lucide-react';
 
-// --- TEMA-DEFINITIONER ---
+// --- TEMA-DEFINITIONER (NU MED ARRAYER) ---
 const themes = {
   sunChaser: {
     id: 'sunChaser',
     title: "Väderkollen",
     slogan: "Vi vägrar dåligt väder – vi hittar solen åt dig.",
     placeholder: "Var ska vi jaga solstrålar idag?",
-    loading: "Skuffar undan molnen...",
+    // Här är arrayen med slumpmässiga texter du bad om:
+    loadingMessages: [
+      "Skuffar undan molnen...",
+      "Kalibrerar solstolen...",
+      "Jagar bort regnet...",
+      "Putsar på solen...",
+      "Letar efter blå himmel..."
+    ],
     winnerLabel: "Solsäkrast!",
     winnerTitle: "Här strålar det mest!",
-    winnerSource: "Dagens hjälte",
+    winnerSource: "Dagens solhjälte",
     button: "Jaga vidare i veckan",
     gridTitle: "Vad säger de andra?",
-    style: "from-blue-400 to-indigo-600" // Blå/Indigo
+    style: "from-blue-400 to-indigo-600"
   },
   bonVivant: {
     id: 'bonVivant',
     title: "Väderkollen",
     slogan: "Maxa dina soltimmar och njut av dagen.",
     placeholder: "Vart drömmer du dig bort?",
-    loading: "Förbereder prognosen för njutning...",
+    loadingMessages: [
+      "Förbereder prognosen för njutning...",
+      "Kollar om det är roséväder...",
+      "Hittar den bästa uteserveringen...",
+      "Mäter livskvalitén...",
+      "Ser över vindarna..."
+    ],
     winnerLabel: "Bästa val",
     winnerTitle: "Det ser ljuvligt ut!",
     winnerSource: "Vår favorit",
     button: "Se veckans ljusglimtar",
     gridTitle: "Alternativa bud",
-    style: "from-emerald-400 to-teal-600" // Grön/Teal
+    style: "from-emerald-400 to-teal-600"
   },
   joySpreader: {
     id: 'joySpreader',
     title: "Glädjeprognosen",
     slogan: "Positiva nyheter först. Alltid.",
     placeholder: "Sök din lyckoplats här...",
-    loading: "Filtrerar bort negativ energi...",
+    loadingMessages: [
+      "Filtrerar bort negativ energi...",
+      "Laddar upp optimism...",
+      "Skapar din egen sol...",
+      "Ignorerar dåliga prognoser...",
+      "Manifestar bra väder..."
+    ],
     winnerLabel: "Vinnare!",
     winnerTitle: "Äntligen goda nyheter!",
     winnerSource: "Optimisten",
     button: "Fortsätt drömma (Prognos)",
     gridTitle: "Vad säger pessimisterna?",
-    style: "from-pink-400 to-rose-600" // Rosa/Röd
+    style: "from-pink-400 to-rose-600"
   }
 };
 
@@ -56,13 +75,15 @@ const GEO_URL = "https://geocoding-api.open-meteo.com/v1/search";
 export default function App() {
   // STATE
   const [activeTheme, setActiveTheme] = useState(themes.sunChaser);
-  const [showAdmin, setShowAdmin] = useState(false);
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [showDashboard, setShowDashboard] = useState(false); // Visar den stora tabellen
   
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [selectedCity, setSelectedCity] = useState(null);
   const [weatherData, setWeatherData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState(""); // Håller den slumpade texten
   const [error, setError] = useState(null);
   const [winner, setWinner] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -70,17 +91,15 @@ export default function App() {
 
   // --- INIT: Läs URL & LocalStorage ---
   useEffect(() => {
-    // 1. Kolla URL parametrar först (?theme=X eller ?admin=true)
     const params = new URLSearchParams(window.location.search);
     const urlTheme = params.get('theme');
-    const isAdmin = params.get('admin');
+    const adminParam = params.get('admin');
 
-    if (isAdmin === 'true') setShowAdmin(true);
+    if (adminParam === 'true') setIsAdminMode(true);
 
     if (urlTheme && themes[urlTheme]) {
       setActiveTheme(themes[urlTheme]);
     } else {
-      // 2. Annars kolla LocalStorage
       const savedTheme = localStorage.getItem('weatherTheme');
       if (savedTheme && themes[savedTheme]) {
         setActiveTheme(themes[savedTheme]);
@@ -92,16 +111,19 @@ export default function App() {
   const changeTheme = (themeKey) => {
     const newTheme = themes[themeKey];
     setActiveTheme(newTheme);
-    localStorage.setItem('weatherTheme', themeKey); // Spara valet
-    
-    // Uppdatera URL:en snyggt utan att ladda om sidan
+    localStorage.setItem('weatherTheme', themeKey);
     const newUrl = new URL(window.location);
     newUrl.searchParams.set('theme', themeKey);
     window.history.pushState({}, '', newUrl);
   };
 
-  // --- APP LOGIC (Samma som förut) ---
-  
+  // --- HELPER: Slumpa laddtext ---
+  const getRandomLoadingText = () => {
+    const messages = activeTheme.loadingMessages;
+    return messages[Math.floor(Math.random() * messages.length)];
+  };
+
+  // --- APP LOGIC ---
   useEffect(() => {
     const timer = setTimeout(() => {
       if (query.length > 2 && !selectedCity) searchCities(query);
@@ -136,6 +158,7 @@ export default function App() {
 
   const fetchRealWeather = async (city) => {
     setLoading(true);
+    setLoadingText(getRandomLoadingText()); // Sätt slumpad text här
     setError(null);
     setWeatherData(null);
     setModalOpen(false);
@@ -244,22 +267,129 @@ export default function App() {
     } catch (e) { console.error(e); }
   };
 
+  // --- CONTENT DASHBOARD RENDER ---
+  if (showDashboard) {
+    return (
+      <div className="min-h-screen bg-gray-100 p-8 font-sans text-gray-800">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <h1 className="text-3xl font-bold flex items-center gap-3">
+              <FileText className="text-blue-600" /> Copywriting Dashboard
+            </h1>
+            <button 
+              onClick={() => setShowDashboard(false)}
+              className="flex items-center gap-2 bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              <ChevronLeft size={16} /> Tillbaka till Appen
+            </button>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-200">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="p-4 font-bold text-gray-500 uppercase text-xs tracking-wider w-1/6">Sektion</th>
+                    <th className="p-4 font-bold text-blue-700 w-1/4">☀️ Solsökaren</th>
+                    <th className="p-4 font-bold text-emerald-700 w-1/4">☕ Livsnjutaren</th>
+                    <th className="p-4 font-bold text-pink-700 w-1/4">🎉 Glädjespridaren</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {/* Title */}
+                  <tr>
+                    <td className="p-4 font-medium text-gray-400">Huvudrubrik</td>
+                    <td className="p-4">{themes.sunChaser.title}</td>
+                    <td className="p-4">{themes.bonVivant.title}</td>
+                    <td className="p-4">{themes.joySpreader.title}</td>
+                  </tr>
+                  {/* Slogan */}
+                  <tr>
+                    <td className="p-4 font-medium text-gray-400">Underrubrik</td>
+                    <td className="p-4 italic">{themes.sunChaser.slogan}</td>
+                    <td className="p-4 italic">{themes.bonVivant.slogan}</td>
+                    <td className="p-4 italic">{themes.joySpreader.slogan}</td>
+                  </tr>
+                  {/* Placeholder */}
+                  <tr>
+                    <td className="p-4 font-medium text-gray-400">Sökruta</td>
+                    <td className="p-4 text-sm bg-gray-50 rounded border border-gray-100">{themes.sunChaser.placeholder}</td>
+                    <td className="p-4 text-sm bg-gray-50 rounded border border-gray-100">{themes.bonVivant.placeholder}</td>
+                    <td className="p-4 text-sm bg-gray-50 rounded border border-gray-100">{themes.joySpreader.placeholder}</td>
+                  </tr>
+                  {/* Loading Array */}
+                  <tr>
+                    <td className="p-4 font-medium text-gray-400 align-top">
+                      Laddar-texter<br/>
+                      <span className="text-xs text-gray-400 font-normal">(Slumpas fram)</span>
+                    </td>
+                    <td className="p-4 align-top">
+                      <ul className="list-disc list-inside text-sm space-y-1 text-gray-600">
+                        {themes.sunChaser.loadingMessages.map((m, i) => <li key={i}>{m}</li>)}
+                      </ul>
+                    </td>
+                    <td className="p-4 align-top">
+                      <ul className="list-disc list-inside text-sm space-y-1 text-gray-600">
+                        {themes.bonVivant.loadingMessages.map((m, i) => <li key={i}>{m}</li>)}
+                      </ul>
+                    </td>
+                    <td className="p-4 align-top">
+                      <ul className="list-disc list-inside text-sm space-y-1 text-gray-600">
+                        {themes.joySpreader.loadingMessages.map((m, i) => <li key={i}>{m}</li>)}
+                      </ul>
+                    </td>
+                  </tr>
+                  {/* Winner Title */}
+                  <tr>
+                    <td className="p-4 font-medium text-gray-400">Vinnarrubrik</td>
+                    <td className="p-4 font-bold">{themes.sunChaser.winnerTitle}</td>
+                    <td className="p-4 font-bold">{themes.bonVivant.winnerTitle}</td>
+                    <td className="p-4 font-bold">{themes.joySpreader.winnerTitle}</td>
+                  </tr>
+                  {/* Winner Label */}
+                  <tr>
+                    <td className="p-4 font-medium text-gray-400">Label (Tag)</td>
+                    <td className="p-4"><span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded">{themes.sunChaser.winnerLabel}</span></td>
+                    <td className="p-4"><span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded">{themes.bonVivant.winnerLabel}</span></td>
+                    <td className="p-4"><span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded">{themes.joySpreader.winnerLabel}</span></td>
+                  </tr>
+                  {/* Button */}
+                  <tr>
+                    <td className="p-4 font-medium text-gray-400">Knapptext</td>
+                    <td className="p-4"><button className="bg-gray-200 text-gray-700 text-xs px-3 py-1 rounded-full">{themes.sunChaser.button}</button></td>
+                    <td className="p-4"><button className="bg-gray-200 text-gray-700 text-xs px-3 py-1 rounded-full">{themes.bonVivant.button}</button></td>
+                    <td className="p-4"><button className="bg-gray-200 text-gray-700 text-xs px-3 py-1 rounded-full">{themes.joySpreader.button}</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- MAIN APP RENDER ---
   return (
     <div className={`min-h-screen bg-gradient-to-br ${activeTheme.style} p-4 font-sans text-gray-800 pb-20 transition-colors duration-500`}>
       
-      {/* ADMIN PANEL (Visas bara om ?admin=true) */}
-      {showAdmin && (
+      {/* ADMIN CONTROLS (Visas bara om ?admin=true) */}
+      {isAdminMode && (
         <div className="fixed bottom-4 right-4 bg-gray-900 text-white p-4 rounded-xl shadow-2xl z-50 border border-gray-700 w-64 animate-in slide-in-from-bottom-5">
-          <div className="flex items-center gap-2 mb-3 border-b border-gray-700 pb-2">
-            <Settings className="w-4 h-4 text-gray-400" />
-            <span className="font-bold text-sm uppercase tracking-wider">Admin: Välj Tema</span>
+          <div className="flex items-center justify-between mb-3 border-b border-gray-700 pb-2">
+            <div className="flex items-center gap-2">
+              <Settings className="w-4 h-4 text-gray-400" />
+              <span className="font-bold text-sm uppercase tracking-wider">Admin</span>
+            </div>
+            <span className="text-xs text-green-400">● Active</span>
           </div>
-          <div className="space-y-2">
+          
+          <div className="space-y-2 mb-4">
             <button 
               onClick={() => changeTheme('sunChaser')}
               className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${activeTheme.id === 'sunChaser' ? 'bg-blue-600 font-bold' : 'hover:bg-gray-800'}`}
             >
-              ☀️ Solsökaren (Original)
+              ☀️ Solsökaren
             </button>
             <button 
               onClick={() => changeTheme('bonVivant')}
@@ -274,11 +404,19 @@ export default function App() {
               🎉 Glädjespridaren
             </button>
           </div>
+
           <button 
-            onClick={() => setShowAdmin(false)} 
-            className="mt-4 text-xs text-gray-500 hover:text-white underline w-full text-center"
+            onClick={() => setShowDashboard(true)}
+            className="w-full flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white text-xs py-2 rounded border border-gray-600 mb-2"
           >
-            Stäng panel
+            <FileText size={12} /> Visa Textöversikt
+          </button>
+          
+          <button 
+            onClick={() => setIsAdminMode(false)} 
+            className="text-xs text-gray-500 hover:text-white underline w-full text-center"
+          >
+            Dölj Admin
           </button>
         </div>
       )}
@@ -330,11 +468,11 @@ export default function App() {
           )}
         </div>
 
-        {/* LOADING */}
+        {/* LOADING (MED SLUMPAD TEXT) */}
         {loading && (
           <div className="text-center py-10 text-white">
             <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-yellow-300" />
-            <p className="font-semibold text-lg">{activeTheme.loading}</p>
+            <p className="font-semibold text-lg animate-pulse">{loadingText}</p>
           </div>
         )}
 
