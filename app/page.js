@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import { 
   Search, X, CloudSun, CloudRain, Sun, Cloud, 
@@ -5,9 +7,6 @@ import {
 } from 'lucide-react';
 
 // --- API KONFIGURATION ---
-// Vi använder Open-Meteo eftersom det är gratis, öppet och stöder CORS (anrop från webbläsaren).
-// I en skarp app hade du kanske haft en egen backend (Node.js) som proxy för att dölja API-nycklar till SMHI/AccuWeather.
-
 const API_URL = "https://api.open-meteo.com/v1/forecast";
 const GEO_URL = "https://geocoding-api.open-meteo.com/v1/search";
 
@@ -24,7 +23,6 @@ export default function App() {
 
   // --- DEL 1: SÖK STAD (RIKTIGT API) ---
   
-  // Debounce sökning så vi inte hamrar API:et varje tangenttryck
   useEffect(() => {
     const timer = setTimeout(() => {
       if (query.length > 2 && !selectedCity) {
@@ -51,14 +49,11 @@ export default function App() {
   };
 
   const handleSelectCity = (city) => {
-    // Spara vald stad och rensa sökresultat
     const cityName = city.name;
     const country = city.country;
     setQuery(`${cityName}, ${country}`);
     setSuggestions([]);
     setSelectedCity(city);
-    
-    // Hämta väder direkt när stad är vald
     fetchRealWeather(city);
   };
 
@@ -79,8 +74,6 @@ export default function App() {
     setWeatherData(null);
 
     try {
-      // Vi hämtar data från flera modeller samtidigt för att simulera "olika tjänster"
-      // icon_code förklaras här: https://open-meteo.com/en/docs
       const params = new URLSearchParams({
         latitude: city.latitude,
         longitude: city.longitude,
@@ -88,7 +81,6 @@ export default function App() {
         daily: "weather_code,temperature_2m_max,temperature_2m_min",
         timezone: "auto",
         forecast_days: 6,
-        // Här begär vi olika modeller för att jämföra data!
         models: "best_match,metno_nordic,gfs_seamless,ecmwf_ifs04" 
       });
 
@@ -97,15 +89,6 @@ export default function App() {
       if (!response.ok) throw new Error('Kunde inte hämta väderdata');
       
       const data = await response.json();
-      
-      // Mappa om rådata till vårt app-format
-      // Eftersom Open-Meteo returnerar en array om vi ber om flera modeller, hanterar vi det.
-      // OBS: Open-Meteo gratis-API returnerar ibland bara ett objekt om man inte specifikt använder deras jämförelse-endpoint,
-      // så för denna demo simulerar vi de små variationerna baserat på "Best Match" för att garantera att det fungerar 
-      // utan komplex parsing av deras CSV-liknande array-svar.
-      
-      // För att göra det pedagogiskt: Vi tar "riktig" data som bas, och skapar "leverantörerna"
-      // I en fullskalig app hade du gjort 4 separata fetch-anrop till SMHI, YR, etc.
       
       const baseTemp = data.current.temperature_2m;
       const baseCode = data.current.weather_code;
@@ -120,24 +103,20 @@ export default function App() {
       ];
 
       const processedData = providers.map((provider, index) => {
-        // Vi lägger till mikroskopiska variationer för att visa att de kan skilja sig
-        // (I verkligheten skiljer de sig ofta med 0.5 - 2 grader)
         const variance = index === 0 ? 0 : (Math.random() * 1.5) - 0.75; 
         const temp = Number((baseTemp + variance).toFixed(1));
         
         return {
           provider,
           temp,
-          conditionCode: baseCode, // WMO code
+          conditionCode: baseCode,
           wind: Number((baseWind + (Math.random())).toFixed(1)),
           rain: baseRain,
           score: calculateScore(temp, baseRain, baseCode),
-          // Spara hela objektet för prognosen
           daily: data.daily 
         };
       });
 
-      // Hitta vinnare
       const best = processedData.reduce((prev, current) => (prev.score > current.score) ? prev : current);
 
       setWeatherData(processedData);
@@ -152,10 +131,8 @@ export default function App() {
   };
 
   const calculateScore = (temp, rain, code) => {
-    // Enkel algoritm: Hög temp bra, regn dåligt.
     let score = temp * 2;
     if (rain > 0) score -= (rain * 5);
-    // WMO koder: 0-3 är bra (sol/moln), högre är ofta regn/snö
     if (code <= 3) score += 10;
     if (code >= 50) score -= 20;
     return score;
@@ -164,14 +141,12 @@ export default function App() {
   // --- HJÄLPFUNKTIONER ---
 
   const getWMOIcon = (code, className = "w-6 h-6") => {
-    // WMO Weather interpretation codes (WW)
-    // https://open-meteo.com/en/docs
     if (code === 0) return <Sun className={`text-yellow-500 ${className}`} />;
     if (code === 1 || code === 2) return <CloudSun className={`text-yellow-400 ${className}`} />;
     if (code === 3) return <Cloud className={`text-gray-400 ${className}`} />;
     if (code >= 51 && code <= 67) return <CloudRain className={`text-blue-400 ${className}`} />;
-    if (code >= 71) return <CloudRain className={`text-indigo-300 ${className}`} />; // Snö/Hagel
-    if (code >= 95) return <Wind className={`text-purple-500 ${className}`} />; // Åska
+    if (code >= 71) return <CloudRain className={`text-indigo-300 ${className}`} />;
+    if (code >= 95) return <Wind className={`text-purple-500 ${className}`} />;
     return <CloudSun className={`text-gray-400 ${className}`} />;
   };
 
@@ -191,13 +166,10 @@ export default function App() {
   const openForecast = () => {
     if (!winner) return;
     
-    // Mappa datan från API:et till vår lista
     const dailyData = winner.daily;
     const days = ['Sön', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör'];
     
     const newForecast = dailyData.time.slice(1, 6).map((dateStr, idx) => {
-      // dailyData arrayerna matchar indexet för datumet
-      // Vi hoppar över index 0 (idag) och tar 5 dagar framåt
       const actualIndex = idx + 1; 
       const dateObj = new Date(dateStr);
       const dayName = days[dateObj.getDay()];
