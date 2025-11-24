@@ -21,7 +21,7 @@ export default function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [forecast, setForecast] = useState([]);
 
-  // --- DEL 1: SÖK STAD (RIKTIGT API) ---
+  // --- DEL 1: SÖK STAD ---
   
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -64,24 +64,27 @@ export default function App() {
     setSelectedCity(null);
     setWinner(null);
     setError(null);
+    setModalOpen(false);
   };
 
-  // --- DEL 2: HÄMTA VÄDER (RIKTIGT API) ---
+  // --- DEL 2: HÄMTA VÄDER ---
 
   const fetchRealWeather = async (city) => {
     setLoading(true);
     setError(null);
     setWeatherData(null);
+    setModalOpen(false); // Stäng modal om den är öppen
 
     try {
+      // FIX: Vi tar bort 'models'-parametern för att garantera ett enkelt JSON-svar 
+      // som alltid innehåller 'daily' på rätt ställe.
       const params = new URLSearchParams({
         latitude: city.latitude,
         longitude: city.longitude,
         current: "temperature_2m,weather_code,wind_speed_10m,precipitation",
         daily: "weather_code,temperature_2m_max,temperature_2m_min",
         timezone: "auto",
-        forecast_days: 6,
-        models: "best_match,metno_nordic,gfs_seamless,ecmwf_ifs04" 
+        forecast_days: 7 // Hämtar 7 dagar för att vara säker på att vi har data
       });
 
       const response = await fetch(`${API_URL}?${params.toString()}`);
@@ -90,6 +93,11 @@ export default function App() {
       
       const data = await response.json();
       
+      // Kontrollera att vi faktiskt fick data
+      if (!data.current || !data.daily) {
+        throw new Error("Ofullständig data från leverantören");
+      }
+      
       const baseTemp = data.current.temperature_2m;
       const baseCode = data.current.weather_code;
       const baseWind = data.current.wind_speed_10m;
@@ -97,11 +105,12 @@ export default function App() {
 
       const providers = [
         { id: 'smhi', name: 'SMHI (Simulerad)', color: 'text-blue-600', bg: 'bg-blue-50', ring: 'ring-blue-200' },
-        { id: 'yr', name: 'YR (MetNo data)', color: 'text-cyan-600', bg: 'bg-cyan-50', ring: 'ring-cyan-200' },
+        { id: 'yr', name: 'YR (MetNo)', color: 'text-cyan-600', bg: 'bg-cyan-50', ring: 'ring-cyan-200' },
         { id: 'ow', name: 'OpenWeather', color: 'text-orange-600', bg: 'bg-orange-50', ring: 'ring-orange-200' },
         { id: 'accu', name: 'AccuWeather', color: 'text-yellow-600', bg: 'bg-yellow-50', ring: 'ring-yellow-200' }
       ];
 
+      // Skapa variationer för jämförelsen
       const processedData = providers.map((provider, index) => {
         const variance = index === 0 ? 0 : (Math.random() * 1.5) - 0.75; 
         const temp = Number((baseTemp + variance).toFixed(1));
@@ -113,7 +122,7 @@ export default function App() {
           wind: Number((baseWind + (Math.random())).toFixed(1)),
           rain: baseRain,
           score: calculateScore(temp, baseRain, baseCode),
-          daily: data.daily 
+          daily: data.daily // Nu är vi säkra på att denna finns!
         };
       });
 
@@ -123,7 +132,7 @@ export default function App() {
       setWinner(best);
 
     } catch (err) {
-      setError("Kunde inte ansluta till vädertjänsterna. Kontrollera din anslutning.");
+      setError("Kunde inte ansluta till vädertjänsterna. Försök igen.");
       console.error(err);
     } finally {
       setLoading(false);
@@ -161,29 +170,39 @@ export default function App() {
     return "Växlande";
   };
 
-  // --- PROGNOS MODAL ---
+  // --- PROGNOS MODAL (Bug fixad här) ---
 
   const openForecast = () => {
-    if (!winner) return;
+    if (!winner || !winner.daily) {
+      console.error("Ingen prognosdata tillgänglig");
+      return;
+    }
     
-    const dailyData = winner.daily;
-    const days = ['Sön', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör'];
-    
-    const newForecast = dailyData.time.slice(1, 6).map((dateStr, idx) => {
-      const actualIndex = idx + 1; 
-      const dateObj = new Date(dateStr);
-      const dayName = days[dateObj.getDay()];
+    try {
+      const dailyData = winner.daily;
+      const days = ['Sön', 'Mån', 'Tis', 'Ons', 'Tor', 'Fre', 'Lör'];
       
-      return {
-        day: dayName,
-        max: dailyData.temperature_2m_max[actualIndex],
-        min: dailyData.temperature_2m_min[actualIndex],
-        code: dailyData.weather_code[actualIndex]
-      };
-    });
+      // Säkerställ att vi har data att loopa över
+      if (!dailyData.time || dailyData.time.length < 2) return;
 
-    setForecast(newForecast);
-    setModalOpen(true);
+      const newForecast = dailyData.time.slice(1, 6).map((dateStr, idx) => {
+        const actualIndex = idx + 1; // Hoppa över idag (index 0)
+        const dateObj = new Date(dateStr);
+        const dayName = days[dateObj.getDay()];
+        
+        return {
+          day: dayName,
+          max: dailyData.temperature_2m_max[actualIndex],
+          min: dailyData.temperature_2m_min[actualIndex],
+          code: dailyData.weather_code[actualIndex]
+        };
+      });
+
+      setForecast(newForecast);
+      setModalOpen(true);
+    } catch (e) {
+      console.error("Fel vid skapande av prognos:", e);
+    }
   };
 
   return (
@@ -222,7 +241,7 @@ export default function App() {
             )}
           </div>
 
-          {/* SUGGESTIONS LIST (Från API) */}
+          {/* SUGGESTIONS LIST */}
           {suggestions.length > 0 && !selectedCity && (
             <div className="absolute w-full mt-2 bg-white rounded-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2">
               {suggestions.map((city, idx) => (
@@ -264,7 +283,7 @@ export default function App() {
         {!loading && weatherData && winner && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             
-            {/* WINNER BANNER */}
+            {/* WINNER BANNER - Klickbar för modal */}
             <div 
               onClick={openForecast}
               className="bg-gradient-to-r from-yellow-200 to-yellow-400 rounded-2xl p-6 mb-8 shadow-lg transform hover:scale-[1.01] transition-transform cursor-pointer text-center relative overflow-hidden border-4 border-white/50 group"
@@ -365,7 +384,7 @@ export default function App() {
             
             {/* Modal List */}
             <div className="p-6 bg-gray-50 space-y-3">
-              {forecast.map((day, idx) => (
+              {forecast.length > 0 ? forecast.map((day, idx) => (
                 <div key={idx} className="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm border border-gray-100">
                   <div className="w-20 font-semibold text-gray-700">{day.day}</div>
                   <div className="flex-1 flex items-center justify-center gap-2">
@@ -379,7 +398,9 @@ export default function App() {
                      <span className="text-gray-400">{Math.round(day.min)}°</span>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <p className="text-center text-gray-500">Laddar prognos...</p>
+              )}
             </div>
 
             <div className="p-4 bg-gray-100 text-center text-xs text-gray-500">
