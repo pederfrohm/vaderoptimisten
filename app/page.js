@@ -6,31 +6,49 @@ import {
   Wind, Umbrella, Trophy, ArrowRight, MapPin, Loader2, AlertCircle, Settings, FileText, ChevronLeft
 } from 'lucide-react';
 
-// --- TEMA-DEFINITIONER (NU MED ARRAYER) ---
+// --- TEMA-DEFINITIONER ---
 const themes = {
   sunChaser: {
     id: 'sunChaser',
-    title: "Väderkollen",
-    slogan: "Vi vägrar dåligt väder – vi hittar solen åt dig.",
-    placeholder: "Var ska vi jaga solstrålar idag?",
-    // Här är arrayen med slumpmässiga texter du bad om:
+    title: "Klarast.nu", 
+    slogan: "Sveriges mest optimistiska vädertjänst.", 
+    placeholder: "Var vill du ha sol idag?",
     loadingMessages: [
-      "Skuffar undan molnen...",
-      "Kalibrerar solstolen...",
-      "Jagar bort regnet...",
-      "Putsar på solen...",
-      "Letar efter blå himmel..."
+      "Jämför ljusstyrkan...",
+      "Letar efter klarast himmel...",
+      "Scannar horisonten...",
+      "Ignorerar gråa moln...",
+      "Hittar ljusglimtarna..."
     ],
-    winnerLabel: "Solsäkrast!",
-    winnerTitle: "Här strålar det mest!",
-    winnerSource: "Dagens solhjälte",
-    button: "Jaga vidare i veckan",
-    gridTitle: "Vad säger de andra?",
-    style: "from-blue-400 to-indigo-600"
+    winnerLabel: "Klarast just nu!",
+    winnerTitle: "Här ser det ljusast ut!",
+    winnerSource: "Dagens vinnare",
+    button: "Se prognosen i detalj",
+    gridTitle: "De andra alternativen",
+    style: "from-sky-400 to-blue-600"
+  },
+  holidaySavior: {
+    id: 'holidaySavior',
+    title: "Klarast.nu", 
+    slogan: "Vi räddar din semester när andra lovar regn.", // KAXIG!
+    placeholder: "Vart flyr vi från regnet?", // KAXIG!
+    loadingMessages: [
+      "Avbokar regnmolnen...",
+      "Mutar vädergudarna...",
+      "Hittar solen du förtjänar...",
+      "Letar upp en lucka i molntäcket...",
+      "Vägrar acceptera dåligt väder..."
+    ],
+    winnerLabel: "Semesterräddare!",
+    winnerTitle: "Här kan du packa badkläderna!",
+    winnerSource: "Bästa budet",
+    button: "Säkra solstolarna (Prognos)",
+    gridTitle: "Tråkiga nyheter (Andra källor)",
+    style: "from-orange-400 to-red-500" // Varm, "brådskande" färg
   },
   bonVivant: {
     id: 'bonVivant',
-    title: "Väderkollen",
+    title: "Väderkollen", 
     slogan: "Maxa dina soltimmar och njut av dagen.",
     placeholder: "Vart drömmer du dig bort?",
     loadingMessages: [
@@ -46,25 +64,6 @@ const themes = {
     button: "Se veckans ljusglimtar",
     gridTitle: "Alternativa bud",
     style: "from-emerald-400 to-teal-600"
-  },
-  joySpreader: {
-    id: 'joySpreader',
-    title: "Glädjeprognosen",
-    slogan: "Positiva nyheter först. Alltid.",
-    placeholder: "Sök din lyckoplats här...",
-    loadingMessages: [
-      "Filtrerar bort negativ energi...",
-      "Laddar upp optimism...",
-      "Skapar din egen sol...",
-      "Ignorerar dåliga prognoser...",
-      "Manifestar bra väder..."
-    ],
-    winnerLabel: "Vinnare!",
-    winnerTitle: "Äntligen goda nyheter!",
-    winnerSource: "Optimisten",
-    button: "Fortsätt drömma (Prognos)",
-    gridTitle: "Vad säger pessimisterna?",
-    style: "from-pink-400 to-rose-600"
   }
 };
 
@@ -76,20 +75,20 @@ export default function App() {
   // STATE
   const [activeTheme, setActiveTheme] = useState(themes.sunChaser);
   const [isAdminMode, setIsAdminMode] = useState(false);
-  const [showDashboard, setShowDashboard] = useState(false); // Visar den stora tabellen
+  const [showDashboard, setShowDashboard] = useState(false);
   
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [selectedCity, setSelectedCity] = useState(null);
   const [weatherData, setWeatherData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [loadingText, setLoadingText] = useState(""); // Håller den slumpade texten
+  const [loadingText, setLoadingText] = useState("");
   const [error, setError] = useState(null);
   const [winner, setWinner] = useState(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [forecast, setForecast] = useState([]);
 
-  // --- INIT: Läs URL & LocalStorage ---
+  // --- INIT ---
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlTheme = params.get('theme');
@@ -117,7 +116,6 @@ export default function App() {
     window.history.pushState({}, '', newUrl);
   };
 
-  // --- HELPER: Slumpa laddtext ---
   const getRandomLoadingText = () => {
     const messages = activeTheme.loadingMessages;
     return messages[Math.floor(Math.random() * messages.length)];
@@ -158,7 +156,7 @@ export default function App() {
 
   const fetchRealWeather = async (city) => {
     setLoading(true);
-    setLoadingText(getRandomLoadingText()); // Sätt slumpad text här
+    setLoadingText(getRandomLoadingText());
     setError(null);
     setWeatherData(null);
     setModalOpen(false);
@@ -236,7 +234,7 @@ export default function App() {
   };
 
   const getWMODescription = (code) => {
-    if (code === 0) return "Strålande sol";
+    if (code === 0) return "Klar himmel";
     if (code === 1 || code === 2) return "Mest klart";
     if (code === 3) return "Molnigt";
     if (code >= 51 && code <= 67) return "Regn";
@@ -267,7 +265,7 @@ export default function App() {
     } catch (e) { console.error(e); }
   };
 
-  // --- CONTENT DASHBOARD RENDER ---
+  // --- CONTENT DASHBOARD ---
   if (showDashboard) {
     return (
       <div className="min-h-screen bg-gray-100 p-8 font-sans text-gray-800">
@@ -290,42 +288,46 @@ export default function App() {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="p-4 font-bold text-gray-500 uppercase text-xs tracking-wider w-1/6">Sektion</th>
-                    <th className="p-4 font-bold text-blue-700 w-1/4">☀️ Solsökaren</th>
-                    <th className="p-4 font-bold text-emerald-700 w-1/4">☕ Livsnjutaren</th>
-                    <th className="p-4 font-bold text-pink-700 w-1/4">🎉 Glädjespridaren</th>
+                    <th className="p-4 font-bold text-sky-600 w-1/4">☀️ Originalet</th>
+                    <th className="p-4 font-bold text-orange-600 w-1/4">🔥 Semesterräddaren (Ny!)</th>
+                    <th className="p-4 font-bold text-emerald-700 w-1/4">☕ Väderkollen</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {/* Title */}
                   <tr>
-                    <td className="p-4 font-medium text-gray-400">Huvudrubrik</td>
-                    <td className="p-4">{themes.sunChaser.title}</td>
-                    <td className="p-4">{themes.bonVivant.title}</td>
-                    <td className="p-4">{themes.joySpreader.title}</td>
+                    <td className="p-4 font-medium text-gray-400">Varumärke</td>
+                    <td className="p-4 font-bold text-lg">{themes.sunChaser.title}</td>
+                    <td className="p-4 font-bold text-lg text-orange-600">{themes.holidaySavior.title}</td>
+                    <td className="p-4 text-lg">{themes.bonVivant.title}</td>
                   </tr>
                   {/* Slogan */}
                   <tr>
-                    <td className="p-4 font-medium text-gray-400">Underrubrik</td>
+                    <td className="p-4 font-medium text-gray-400">Slogan</td>
                     <td className="p-4 italic">{themes.sunChaser.slogan}</td>
+                    <td className="p-4 italic font-semibold">{themes.holidaySavior.slogan}</td>
                     <td className="p-4 italic">{themes.bonVivant.slogan}</td>
-                    <td className="p-4 italic">{themes.joySpreader.slogan}</td>
                   </tr>
                   {/* Placeholder */}
                   <tr>
                     <td className="p-4 font-medium text-gray-400">Sökruta</td>
                     <td className="p-4 text-sm bg-gray-50 rounded border border-gray-100">{themes.sunChaser.placeholder}</td>
+                    <td className="p-4 text-sm bg-gray-50 rounded border border-gray-100 font-medium">{themes.holidaySavior.placeholder}</td>
                     <td className="p-4 text-sm bg-gray-50 rounded border border-gray-100">{themes.bonVivant.placeholder}</td>
-                    <td className="p-4 text-sm bg-gray-50 rounded border border-gray-100">{themes.joySpreader.placeholder}</td>
                   </tr>
                   {/* Loading Array */}
                   <tr>
                     <td className="p-4 font-medium text-gray-400 align-top">
-                      Laddar-texter<br/>
-                      <span className="text-xs text-gray-400 font-normal">(Slumpas fram)</span>
+                      Laddar-texter
                     </td>
                     <td className="p-4 align-top">
                       <ul className="list-disc list-inside text-sm space-y-1 text-gray-600">
                         {themes.sunChaser.loadingMessages.map((m, i) => <li key={i}>{m}</li>)}
+                      </ul>
+                    </td>
+                    <td className="p-4 align-top bg-orange-50/50 rounded">
+                      <ul className="list-disc list-inside text-sm space-y-1 text-gray-800 font-medium">
+                        {themes.holidaySavior.loadingMessages.map((m, i) => <li key={i}>{m}</li>)}
                       </ul>
                     </td>
                     <td className="p-4 align-top">
@@ -333,32 +335,20 @@ export default function App() {
                         {themes.bonVivant.loadingMessages.map((m, i) => <li key={i}>{m}</li>)}
                       </ul>
                     </td>
-                    <td className="p-4 align-top">
-                      <ul className="list-disc list-inside text-sm space-y-1 text-gray-600">
-                        {themes.joySpreader.loadingMessages.map((m, i) => <li key={i}>{m}</li>)}
-                      </ul>
-                    </td>
                   </tr>
-                  {/* Winner Title */}
+                  {/* Winner */}
                   <tr>
                     <td className="p-4 font-medium text-gray-400">Vinnarrubrik</td>
-                    <td className="p-4 font-bold">{themes.sunChaser.winnerTitle}</td>
-                    <td className="p-4 font-bold">{themes.bonVivant.winnerTitle}</td>
-                    <td className="p-4 font-bold">{themes.joySpreader.winnerTitle}</td>
-                  </tr>
-                  {/* Winner Label */}
-                  <tr>
-                    <td className="p-4 font-medium text-gray-400">Label (Tag)</td>
-                    <td className="p-4"><span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded">{themes.sunChaser.winnerLabel}</span></td>
-                    <td className="p-4"><span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded">{themes.bonVivant.winnerLabel}</span></td>
-                    <td className="p-4"><span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded">{themes.joySpreader.winnerLabel}</span></td>
+                    <td className="p-4">{themes.sunChaser.winnerTitle}</td>
+                    <td className="p-4 font-bold">{themes.holidaySavior.winnerTitle}</td>
+                    <td className="p-4">{themes.bonVivant.winnerTitle}</td>
                   </tr>
                   {/* Button */}
                   <tr>
-                    <td className="p-4 font-medium text-gray-400">Knapptext</td>
-                    <td className="p-4"><button className="bg-gray-200 text-gray-700 text-xs px-3 py-1 rounded-full">{themes.sunChaser.button}</button></td>
-                    <td className="p-4"><button className="bg-gray-200 text-gray-700 text-xs px-3 py-1 rounded-full">{themes.bonVivant.button}</button></td>
-                    <td className="p-4"><button className="bg-gray-200 text-gray-700 text-xs px-3 py-1 rounded-full">{themes.joySpreader.button}</button></td>
+                    <td className="p-4 font-medium text-gray-400">Knapp</td>
+                    <td className="p-4 text-xs">{themes.sunChaser.button}</td>
+                    <td className="p-4 text-xs font-bold">{themes.holidaySavior.button}</td>
+                    <td className="p-4 text-xs">{themes.bonVivant.button}</td>
                   </tr>
                 </tbody>
               </table>
@@ -373,7 +363,7 @@ export default function App() {
   return (
     <div className={`min-h-screen bg-gradient-to-br ${activeTheme.style} p-4 font-sans text-gray-800 pb-20 transition-colors duration-500`}>
       
-      {/* ADMIN CONTROLS (Visas bara om ?admin=true) */}
+      {/* ADMIN CONTROLS */}
       {isAdminMode && (
         <div className="fixed bottom-4 right-4 bg-gray-900 text-white p-4 rounded-xl shadow-2xl z-50 border border-gray-700 w-64 animate-in slide-in-from-bottom-5">
           <div className="flex items-center justify-between mb-3 border-b border-gray-700 pb-2">
@@ -387,21 +377,21 @@ export default function App() {
           <div className="space-y-2 mb-4">
             <button 
               onClick={() => changeTheme('sunChaser')}
-              className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${activeTheme.id === 'sunChaser' ? 'bg-blue-600 font-bold' : 'hover:bg-gray-800'}`}
+              className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${activeTheme.id === 'sunChaser' ? 'bg-sky-600 font-bold' : 'hover:bg-gray-800'}`}
             >
-              ☀️ Solsökaren
+              ☀️ Klarast.nu (Standard)
+            </button>
+            <button 
+              onClick={() => changeTheme('holidaySavior')}
+              className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${activeTheme.id === 'holidaySavior' ? 'bg-orange-600 font-bold' : 'hover:bg-gray-800'}`}
+            >
+              🔥 Semesterräddaren
             </button>
             <button 
               onClick={() => changeTheme('bonVivant')}
               className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${activeTheme.id === 'bonVivant' ? 'bg-emerald-600 font-bold' : 'hover:bg-gray-800'}`}
             >
-              ☕ Livsnjutaren
-            </button>
-            <button 
-              onClick={() => changeTheme('joySpreader')}
-              className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${activeTheme.id === 'joySpreader' ? 'bg-pink-600 font-bold' : 'hover:bg-gray-800'}`}
-            >
-              🎉 Glädjespridaren
+              ☕ Väderkollen
             </button>
           </div>
 
@@ -468,7 +458,7 @@ export default function App() {
           )}
         </div>
 
-        {/* LOADING (MED SLUMPAD TEXT) */}
+        {/* LOADING */}
         {loading && (
           <div className="text-center py-10 text-white">
             <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-yellow-300" />
