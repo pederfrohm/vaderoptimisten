@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Search, MapPin, Sun, Cloud, CloudRain, Wind, ArrowRight, CheckCircle, BarChart3, ChevronRight, Settings, Edit3, LocateFixed, Loader2, Snowflake, Trophy, Share2, Calendar, X } from 'lucide-react';
+import { Search, MapPin, Sun, Cloud, CloudRain, ArrowRight, CheckCircle, BarChart3, ChevronRight, Settings, Edit3, LocateFixed, Loader2, Snowflake, Trophy, Share2, Calendar, X } from 'lucide-react';
 
 const WeatherApp = () => {
   // --- STATE ---
@@ -576,4 +576,5 @@ const WeatherApp = () => {
 };
 
 export default WeatherApp;
+
 
