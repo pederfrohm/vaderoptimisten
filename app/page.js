@@ -1,17 +1,10 @@
 'use client';
 
-// --- DEPLOY CHECK: Version 1.5 - Force Update ---
-// Om du läser detta har filen uppdaterats korrekt till Vercel.
-
+// --- DEPLOY CHECK: Version 2.0 - New Copywriting ---
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, MapPin, Sun, Cloud, CloudRain, ArrowRight, CheckCircle, BarChart3, ChevronRight, Settings, Edit3, LocateFixed, Loader2, Snowflake, Trophy, Share2, Calendar, X } from 'lucide-react';
 
 const WeatherApp = () => {
-  // Debug log för att se att klienten körs
-  useEffect(() => {
-    console.log("Klarast.nu Client Component Mounted - Version 1.5");
-  }, []);
-
   // --- STATE ---
   const [viewState, setViewState] = useState('home'); 
   const [query, setQuery] = useState('');
@@ -28,57 +21,59 @@ const WeatherApp = () => {
 
   // --- ADMIN STATE ---
   const [showAdmin, setShowAdmin] = useState(false);
-  const [currentStyleId, setCurrentStyleId] = useState('poetic');
   
-  // --- COPY DECK ---
+  // Sätter "Ordspråket" som default
+  const [currentStyleId, setCurrentStyleId] = useState('twist');
+  
+  // --- COPY DECK (DE FYRA SPÅREN) ---
   const [copyDeck, setCopyDeck] = useState({
-    poetic: {
-      id: 'poetic',
-      name: 'Poetisk (Original)',
-      headline: "Hur ser himlen ut?",
-      subheadline: "Vi letar efter ljuset i alla prognoser.",
+    twist: {
+      id: 'twist',
+      name: 'Ordspråket (Favorit)',
+      headline: "Det finns inget dåligt väder.",
+      subheadline: "Bara pessimistiska prognoser. Vi letar upp solen åt dig.",
       placeholder: "Vart leder din dag?",
-      loadingSteps: "Känner av vinden..., Lyssnar på molnen..., Frågar SMHI om råd..., Tolkar atmosfären..., Hittar det bästa ljuset...",
-      resultTitle: "{winner} lovar bäst väder.",
-      resultSub: "Lita på ljuset.",
-      shareText: "Jag fann ljuset via Klarast.nu.",
-      providerTitle: "Andra bud"
+      loadingSteps: "Synar pessimisterna..., Letar efter ljusglimtar..., Jämför molnighet..., Hittar bästa källan..., Förbereder sanningen...",
+      resultTitle: "{winner} har rätt inställning.",
+      resultSub: "Det blir {temp} grader. Njut av dagen.",
+      shareText: "Det finns inget dåligt väder. Hitta ljuset på Klarast.nu",
+      providerTitle: "De andra gissningarna"
     },
-    bold: {
-      id: 'bold',
-      name: 'Kaxig',
-      headline: "Sluta gissa vädret.",
-      subheadline: "Vi ställer SMHI mot YR. Vinnaren får din uppmärksamhet.",
+    challenger: {
+      id: 'challenger',
+      name: 'Utmanaren (Kaxig)',
+      headline: "Vi hittar solen som SMHI missade.",
+      subheadline: "Varför nöja sig med regn? Vi ställer prognoserna mot väggen.",
       placeholder: "Vilken stad ska vi syna?",
-      loadingSteps: "Startar motorn..., Tvingar fram data från SMHI..., Ställer YR mot väggen..., Krossar siffrorna..., Räknar ut vem som levererar..., Här är vinnaren...",
-      resultTitle: "{winner} krossar motståndet.",
-      resultSub: "{temp} grader. Det är det enda som räknas.",
-      shareText: "Hittade bästa vädret på Klarast.nu. Sluta gissa du med.",
+      loadingSteps: "Startar motorn..., Tvingar fram data..., Vem ljuger minst?..., Korrigerar prognosen..., Här är vinnaren...",
+      resultTitle: "{winner} vinner matchen.",
+      resultSub: "{temp} grader. Bättre blir det inte.",
+      shareText: "Jag hittade solen som SMHI missade på Klarast.nu",
       providerTitle: "Förlorarna"
     },
-    vacation: {
-      id: 'vacation',
-      name: 'Semesterräddaren',
-      headline: "Rädda semestern.",
-      subheadline: "Vi hittar den mest optimistiska prognosen. Maxa dina soltimmar.",
+    optimist: {
+      id: 'optimist',
+      name: 'Optimisten (Semester)',
+      headline: "Vi väljer alltid den ljusa sidan.",
+      subheadline: "Din dag förtjänar den bästa prognosen. Vi maxar dina soltimmar.",
       placeholder: "Var finns stranden?",
-      loadingSteps: "Scannar stränder..., Letar efter glasskiosker..., Ignorerar regnmoln..., Letar efter optimism..., Optimerar solbrännan...",
-      resultTitle: "{winner} är din semesterhjälte!",
-      resultSub: "{temp} grader varmt. Packa väskan.",
-      shareText: "Jag har hittat solen! Kolla här: Klarast.nu",
-      providerTitle: "Pessimisterna"
+      loadingSteps: "Ignorerar regnmoln..., Letar efter optimism..., Maximerar D-vitamin..., Kollar badtemperatur..., Dukar upp...",
+      resultTitle: "Härligast väder hos {winner}!",
+      resultSub: "{temp} grader varmt. Glöm inte solkrämen.",
+      shareText: "Vi väljer den ljusa sidan. Hitta ditt bästa väder på Klarast.nu",
+      providerTitle: "De tråkiga alternativen"
     },
-    street: {
-      id: 'street',
-      name: 'Gatans Lag',
-      headline: "Vem ljuger minst?",
-      subheadline: "Vi synar bluffen. Bästa prognosen vinner.",
-      placeholder: "Vart ska du?",
-      loadingSteps: "Kollar läget..., Vem snackar skit?..., Synar bluffen..., Fixar siffrorna..., Håll i hatten...",
-      resultTitle: "{winner} har rätta virket.",
-      resultSub: "{temp} bast. Det är vad det är.",
-      shareText: "Kolla läget på Klarast.nu",
-      providerTitle: "Golarna"
+    minimalist: {
+      id: 'minimalist',
+      name: 'Minimalisten (Tech)',
+      headline: "Vädret, optimerat.",
+      subheadline: "Realtidsdata från SMHI, YR, GFS & DWD. En vinnare.",
+      placeholder: "Sök plats...",
+      loadingSteps: "Hämtar dataset..., Analyserar modeller..., Beräknar konsensus..., Viktning av temperatur..., Renderar resultat...",
+      resultTitle: "{winner}: {temp}°C",
+      resultSub: "Bästa tillgängliga data.",
+      shareText: "Optimerad väderdata från Klarast.nu",
+      providerTitle: "Datapunkter"
     }
   });
 
@@ -380,7 +375,7 @@ const WeatherApp = () => {
             </div>
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 <div>
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 block">Tema</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 block">Tema / Spår</label>
                     <div className="grid grid-cols-2 gap-2">
                         {Object.values(copyDeck).map((style) => (
                             <button key={style.id} onClick={() => setCurrentStyleId(style.id)} className={`px-3 py-2 rounded-lg text-xs font-bold text-left transition ${currentStyleId === style.id ? 'bg-orange-500 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
@@ -393,6 +388,10 @@ const WeatherApp = () => {
                 <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
                     <label className="text-[10px] text-orange-400 uppercase font-bold mb-1 block">Dela-text</label>
                     <textarea value={activeCopy.shareText} onChange={(e) => handleCopyUpdate('shareText', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:border-orange-500 focus:outline-none" rows="2" />
+                </div>
+                <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                    <label className="text-[10px] text-orange-400 uppercase font-bold mb-1 block">Underrubrik</label>
+                    <textarea value={activeCopy.subheadline} onChange={(e) => handleCopyUpdate('subheadline', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:border-orange-500 focus:outline-none" rows="2" />
                 </div>
             </div>
         </div>
