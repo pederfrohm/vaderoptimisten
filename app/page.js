@@ -1,7 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Search, MapPin, Sun, Cloud, CloudRain, Wind, Droplets, ArrowRight, CheckCircle, BarChart3, ChevronRight, Settings, Edit3, Save, RotateCcw, LocateFixed, Loader2, ThermometerSun, Snowflake, Trophy, Share2, Calendar, Copy, X } from 'lucide-react';
+'use client';
 
-const WeatherAppFixed = () => {
+import React, { useState, useRef } from 'react';
+import { Search, MapPin, Sun, Cloud, CloudRain, Wind, ArrowRight, CheckCircle, BarChart3, ChevronRight, Settings, Edit3, LocateFixed, Loader2, Snowflake, Trophy, Share2, Calendar, X } from 'lucide-react';
+
+const WeatherAppDeployReady = () => {
   // --- STATE ---
   const [viewState, setViewState] = useState('home'); 
   const [query, setQuery] = useState('');
@@ -75,7 +77,6 @@ const WeatherAppFixed = () => {
   const activeCopy = copyDeck[currentStyleId];
 
   // --- FALLBACK DATA GENERATOR ---
-  // Används om API:et eller nätverket strular så att användaren ALLTID får ett resultat
   const generateFallbackData = (cityName) => {
     const baseTemp = 18 + Math.floor(Math.random() * 5);
     const date = new Date();
@@ -105,7 +106,6 @@ const WeatherAppFixed = () => {
     if (!searchTerm || searchTerm.length < 2) return;
     
     try {
-      // Använd Open-Meteo Geocoding
       const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchTerm)}&count=5&language=sv&format=json`);
       if (!response.ok) throw new Error("Network response was not ok");
       
@@ -118,7 +118,6 @@ const WeatherAppFixed = () => {
       }
     } catch (error) {
       console.warn("Geocoding failed, using fallback suggestions:", error);
-      // Fallback suggestions om API misslyckas
       setSearchResults([
           { id: 1, name: searchTerm, country: "Sökning", admin1: "Klicka för att söka", latitude: 59.32, longitude: 18.06 }
       ]);
@@ -170,7 +169,6 @@ const WeatherAppFixed = () => {
         return;
     }
 
-    // Timeout om det tar för lång tid (vanligt problem)
     const geoTimeout = setTimeout(() => {
         handleLocateError("Timeout");
     }, 5000);
@@ -199,22 +197,18 @@ const WeatherAppFixed = () => {
   const handleLocateError = (msg) => {
     console.warn("Geolocation failed:", msg);
     setIsLocating(false);
-    // Fallback search för demo-syfte
     startAggregation({ name: "Stockholm (Demo)", admin1: "Plats ej funnen", latitude: 59.3293, longitude: 18.0686 });
   };
 
   const startAggregation = async (locationObj) => {
-    // Rensa gamla sökningar
     setQuery(locationObj.name);
     setViewState('loading');
     setProgress(0);
     setShowSuggestions(false);
     setShowForecast(false);
 
-    // 1. Starta API-anropet i bakgrunden
     const weatherPromise = fetchRealWeather(locationObj.latitude, locationObj.longitude);
     
-    // 2. Kör laddnings-animationen (Theater)
     const stepsArray = activeCopy.loadingSteps.split(',').map(s => s.trim());
     const totalTime = 4000; 
     const stepTime = totalTime / stepsArray.length;
@@ -225,7 +219,6 @@ const WeatherAppFixed = () => {
       await new Promise(r => setTimeout(r, stepTime));
     }
 
-    // 3. Hämta datan
     let data = null;
     try {
         data = await weatherPromise;
@@ -233,7 +226,6 @@ const WeatherAppFixed = () => {
         console.error(e);
     }
 
-    // 4. Bearbeta datan (eller använd fallback)
     if (data) {
         processWinners(data, locationObj);
     } else {
@@ -243,7 +235,6 @@ const WeatherAppFixed = () => {
   };
 
   const getConditionScore = (code) => {
-    // Lägre siffra = Bättre väder (för "Vinnare"-logik)
     if (code === 0) return 0; // Sol
     if (code <= 2) return 1; // Halvklart
     if (code <= 3) return 2; // Moln
@@ -254,7 +245,6 @@ const WeatherAppFixed = () => {
   };
 
   const processWinners = (apiData, location) => {
-    // Säkra upp mot null-värden i API-svar
     const safeGet = (val, fallback) => (val === null || val === undefined) ? fallback : val;
 
     const providers = [
@@ -273,7 +263,7 @@ const WeatherAppFixed = () => {
             id: 'yr', name: "YR.no", 
             temp: safeGet(apiData.current.temperature_2m_met_no_seamless, 0), 
             code: safeGet(apiData.current.weather_code_met_no_seamless, 3),
-            daily: { max: [], min: [], code: [], time: [] } // Fyller ej på daily för alla för att spara kod
+            daily: { max: [], min: [], code: [], time: [] } 
         },
         { 
             id: 'dwd', name: "Global", 
@@ -289,7 +279,6 @@ const WeatherAppFixed = () => {
         }
     ];
 
-    // Sortera fram vinnaren: Lägst Condition Score, sen Högst Temp
     const ranked = providers.sort((a, b) => {
         const scoreA = getConditionScore(a.code);
         const scoreB = getConditionScore(b.code);
@@ -299,7 +288,6 @@ const WeatherAppFixed = () => {
 
     const winner = ranked[0];
     
-    // Om vinnaren saknar daily data (t.ex. GFS), låna från SMHI för forecast-vyn (UX-hack)
     if (!winner.daily.time.length && ranked.find(r => r.id === 'smhi')?.daily?.time?.length) {
         winner.daily = ranked.find(r => r.id === 'smhi').daily;
     }
@@ -587,5 +575,5 @@ const WeatherAppFixed = () => {
   );
 };
 
-export default WeatherAppFixed;
+export default WeatherAppDeployReady;
 
