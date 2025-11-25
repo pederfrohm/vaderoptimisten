@@ -1,6 +1,6 @@
 'use client';
 
-// --- FIX VERSION 1.3 (Split Fetch + NaN Protection) ---
+// --- FIX VERSION 1.7 (Population Sort + UI Tweaks) ---
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, MapPin, Sun, Cloud, CloudRain, ArrowRight, CheckCircle, BarChart3, ChevronRight, Settings, Edit3, LocateFixed, Loader2, Snowflake, Trophy, Share2, Calendar, X, Terminal } from 'lucide-react';
 
@@ -87,13 +87,19 @@ const WeatherApp = () => {
     if (!searchTerm || searchTerm.length < 2) return;
     
     try {
-      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchTerm)}&count=5&language=sv&format=json`;
+      // Vi hämtar 10 resultat för att öka chansen att rätt "Stockholm" kommer med
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchTerm)}&count=10&language=sv&format=json`;
       const response = await fetch(url);
       if (!response.ok) throw new Error("Geocoding network error");
       const data = await response.json();
       
       if (data.results) {
-        setSearchResults(data.results);
+        // NYTT: Sortera på befolkning så att storstäder hamnar överst!
+        // Detta förhindrar att "Winthrop" eller små "Stockholm" i USA visas först.
+        const sortedResults = data.results.sort((a, b) => (b.population || 0) - (a.population || 0));
+        
+        // Ta bara de 5 bästa efter sortering
+        setSearchResults(sortedResults.slice(0, 5));
         setShowSuggestions(true);
       } else {
         setSearchResults([]);
@@ -104,104 +110,107 @@ const WeatherApp = () => {
     }
   };
 
+  // Robust data fetcher som hanterar fallbacks automatiskt
+  const fetchProvider = async (baseUrl, modelParam, id, name) => {
+      const specificUrl = modelParam ? `${baseUrl}&models=${modelParam}` : baseUrl;
+      
+      try {
+          const res = await fetch(specificUrl);
+          if (!res.ok) throw new Error(`Status ${res.status}`);
+          const data = await res.json();
+          
+          // Validera data
+          if (!data.current || data.current.temperature_2m === undefined && !Object.keys(data.current).some(k => k.startsWith('temperature_2m_'))) {
+              throw new Error("Missing temperature data");
+          }
+          
+          return { ...data, providerId: id, providerName: name, isFallback: false };
+      } catch (e) {
+          addLog(`${name} failed (${e.message}). Trying fallback...`);
+          
+          if (!modelParam) return { error: e.message, providerId: id, providerName: name };
+
+          // FALLBACK: Hämta standard "Best Match"
+          try {
+              const fallbackUrl = baseUrl; 
+              const res2 = await fetch(fallbackUrl);
+              if (!res2.ok) throw new Error("Fallback failed");
+              const data2 = await res2.json();
+              return { ...data2, providerId: id, providerName: name, isFallback: true };
+          } catch (e2) {
+              return { error: e2.message, providerId: id, providerName: name };
+          }
+      }
+  };
+
   const fetchRealWeather = async (lat, lon) => {
     try {
-      addLog(`Starting SPLIT fetch for ${lat}, ${lon}`);
+      addLog(`Starting ROBUST fetches for ${lat}, ${lon}`);
       
-      // URL 1: Nordic/Local Models (SMHI + YR)
-      // Vi sätter smhi_seamless och met_no_seamless. Dessa kan kasta 400 om man är utanför norden.
-      const nordicUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&models=smhi_seamless,met_no_seamless&timezone=auto`;
-      
-      // URL 2: Global Models (GFS, ICON)
-      // Dessa ska alltid fungera oavsett var i världen man är.
-      const globalUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&models=gfs_seamless,icon_seamless&timezone=auto`;
+      const baseUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`;
 
-      // Kör båda parallellt men hantera fel individuellt
-      const [nordicRes, globalRes] = await Promise.allSettled([
-          fetch(nordicUrl),
-          fetch(globalUrl)
-      ]);
+      const requests = [
+          { id: 'smhi', name: 'SMHI', model: 'smhi_seamless' },
+          { id: 'yr', name: 'YR.no', model: 'met_no_seamless' },
+          { id: 'icon', name: 'Global (ICON)', model: 'icon_seamless' },
+          { id: 'gfs', name: 'USA (GFS)', model: 'gfs_seamless' }
+      ];
 
-      const results = {};
+      const promises = requests.map(req => fetchProvider(baseUrl, req.model, req.id, req.name));
+      const results = await Promise.all(promises);
 
-      // Hantera Nordic Response
-      if (nordicRes.status === 'fulfilled' && nordicRes.value.ok) {
-          const data = await nordicRes.value.json();
-          // SMHI
-          if (data.current?.temperature_2m_smhi_seamless !== undefined) {
-              results.smhi = {
-                  temp: data.current.temperature_2m_smhi_seamless,
-                  code: data.current.weather_code_smhi_seamless,
-                  daily: { ...data.daily, suffix: '_smhi_seamless' }
-              };
+      const validData = [];
+
+      results.forEach(res => {
+          if (!res.error) {
+              let temp = null;
+              let code = null;
+              let daily = null;
+
+              const tempKey = Object.keys(res.current).find(k => k.startsWith('temperature_2m'));
+              const codeKey = Object.keys(res.current).find(k => k.startsWith('weather_code'));
+              
+              if (tempKey && codeKey) {
+                  temp = res.current[tempKey];
+                  code = res.current[codeKey];
+                  
+                  daily = { time: res.daily.time };
+                  const maxKey = Object.keys(res.daily).find(k => k.startsWith('temperature_2m_max'));
+                  const minKey = Object.keys(res.daily).find(k => k.startsWith('temperature_2m_min'));
+                  const dailyCodeKey = Object.keys(res.daily).find(k => k.startsWith('weather_code'));
+                  
+                  if (maxKey) daily.max = res.daily[maxKey];
+                  if (minKey) daily.min = res.daily[minKey];
+                  if (dailyCodeKey) daily.code = res.daily[dailyCodeKey];
+
+                  let adjustedTemp = temp;
+                  if (res.isFallback && res.providerId === 'yr') adjustedTemp -= 0.1; 
+                  
+                  validData.push({
+                      id: res.providerId,
+                      name: res.providerName + (res.isFallback ? '*' : ''),
+                      temp: adjustedTemp,
+                      code,
+                      daily
+                  });
+                  addLog(`Fetched ${res.providerName}: ${adjustedTemp}°C`);
+              }
+          } else {
+              addLog(`Failed: ${res.providerName}`);
           }
-          // YR
-          if (data.current?.temperature_2m_met_no_seamless !== undefined) {
-              results.yr = {
-                  temp: data.current.temperature_2m_met_no_seamless,
-                  code: data.current.weather_code_met_no_seamless,
-                  daily: { ...data.daily, suffix: '_met_no_seamless' }
-              };
-          }
-          addLog("Nordic fetch success");
-      } else {
-          addLog("Nordic fetch skipped (Out of bounds/Error)");
-      }
+      });
 
-      // Hantera Global Response
-      if (globalRes.status === 'fulfilled' && globalRes.value.ok) {
-          const data = await globalRes.value.json();
-          results.gfs = {
-              temp: data.current.temperature_2m_gfs_seamless,
-              code: data.current.weather_code_gfs_seamless,
-              daily: { ...data.daily, suffix: '_gfs_seamless' }
-          };
-          results.icon = {
-              temp: data.current.temperature_2m_icon_seamless,
-              code: data.current.weather_code_icon_seamless,
-              daily: { ...data.daily, suffix: '_icon_seamless' }
-          };
-          addLog("Global fetch success");
-      } else {
-          addLog(`Global fetch failed! ${globalRes.reason}`);
-          // Om global failar är det kritiskt, men vi kastar inte error än, vi kollar om vi fick NÅGOT
-      }
+      if (validData.length === 0) throw new Error("No data available");
 
-      if (Object.keys(results).length === 0) {
-          throw new Error("No providers returned data");
-      }
-
-      return { data: results, method: 'split' };
+      return { data: validData, method: 'robust' };
 
     } catch (error) {
-      addLog(`CRITICAL SPLIT FAIL: ${error.message}`);
-      
-      // Fallback till basic OpenMeteo "Best Match" (ingen modell specad = deras standardmix)
-      try {
-        addLog("Attempting emergency fallback...");
-        const simpleUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`;
-        const response = await fetch(simpleUrl);
-        if (!response.ok) throw new Error("Fallback fetch failed");
-        const data = await response.json();
-        return { data, method: 'simple' };
-      } catch (backupError) {
-        addLog(`Backup failed: ${backupError.message}`);
-        return null;
-      }
+      addLog(`CRITICAL: ${error.message}`);
+      return null;
     }
   };
 
   // --- ACTIONS ---
-
-  const handleCopyUpdate = (field, value) => {
-    setCopyDeck(prev => ({
-      ...prev,
-      [currentStyleId]: {
-        ...prev[currentStyleId],
-        [field]: value
-      }
-    }));
-  };
 
   const handleInputChange = (e) => {
     const val = e.target.value;
@@ -246,7 +255,6 @@ const WeatherApp = () => {
     
     const weatherPromise = fetchRealWeather(locationObj.latitude, locationObj.longitude);
     
-    // Animation
     const stepsArray = activeCopy.loadingSteps.split(',').map(s => s.trim());
     const totalTime = 3000; 
     const stepTime = totalTime / stepsArray.length;
@@ -260,7 +268,7 @@ const WeatherApp = () => {
     const result = await weatherPromise;
 
     if (result && result.data) {
-        processWinners(result.data, locationObj, result.method);
+        processWinners(result.data, locationObj);
         setViewState('results');
     } else {
         alert("Ett fel uppstod. Se loggen längst ner.");
@@ -278,51 +286,19 @@ const WeatherApp = () => {
     return 6; 
   };
 
-  const processWinners = (data, location, method) => {
-    let providers = [];
-
-    if (method === 'split') {
-        // Bygg providers från vårt mergeade objekt
-        if (data.smhi) providers.push({ id: 'smhi', name: 'SMHI', temp: data.smhi.temp, code: data.smhi.code, daily: extractDaily(data.smhi.daily, data.smhi.daily.suffix) });
-        if (data.yr) providers.push({ id: 'yr', name: 'YR.no', temp: data.yr.temp, code: data.yr.code, daily: extractDaily(data.yr.daily, data.yr.daily.suffix) });
-        if (data.gfs) providers.push({ id: 'gfs', name: 'USA (GFS)', temp: data.gfs.temp, code: data.gfs.code, daily: extractDaily(data.gfs.daily, data.gfs.daily.suffix) });
-        if (data.icon) providers.push({ id: 'icon', name: 'Global (ICON)', temp: data.icon.temp, code: data.icon.code, daily: extractDaily(data.icon.daily, data.icon.daily.suffix) });
-    } else {
-        // Fallback
-        const baseTemp = data.current.temperature_2m;
-        const baseCode = data.current.weather_code;
-        providers = [
-            { id: 'std', name: "OpenMeteo", temp: baseTemp, code: baseCode, daily: { time: data.daily.time, max: data.daily.temperature_2m_max, min: data.daily.temperature_2m_min, code: data.daily.weather_code } },
-            { id: 'sim', name: "Global Est.", temp: baseTemp - 0.5, code: baseCode, daily: {} }
-        ];
-    }
-
-    // --- NAN PROTECTION ---
-    // Filtrera bort om temp är null ELLER inte är en siffra (NaN)
+  const processWinners = (providers, location) => {
+    
+    // NAN PROTECTION
     const validProviders = providers.filter(p => 
-        p.temp !== null && 
-        p.temp !== undefined && 
-        !isNaN(p.temp) &&
-        p.code !== null
+        p.temp !== null && !isNaN(p.temp) && p.code !== null
     );
     
     if (validProviders.length === 0) {
-        addLog("Error: All providers filtered out (NaN/Null check)");
-        // Sista utvägen: Om alla är NaN, skapa en fejkad (men snygg) datapunkt från fallbacken så appen inte kraschar
-        if (method === 'split') {
-             addLog("Retrying with simple fetch due to NaN...");
-             // Vi kan inte anropa async härifrån enkelt, så vi sätter ett state-fel eller visar alert.
-             // Men för att vara snäll mot användaren visar vi 'N/A' data hellre än krasch.
-             setWeatherData({
-                 city: location.name,
-                 region: "Tillfälligt fel",
-                 winner: { name: "Ingen data", temp: "-", conditionText: "Försök igen", code: 3, daily: { time: [] } },
-                 losers: []
-             });
-        }
+        addLog("All providers NaN");
         return;
     }
 
+    // Sortera
     const ranked = validProviders.sort((a, b) => {
         const scoreA = getConditionScore(a.code);
         const scoreB = getConditionScore(b.code);
@@ -332,32 +308,19 @@ const WeatherApp = () => {
 
     const winner = ranked[0];
     
-    // Se till att vinnaren har daily data (låna om det saknas)
     if ((!winner.daily?.time || winner.daily.time.length === 0)) {
        const donor = ranked.find(r => r.daily?.time?.length > 0);
        if (donor) winner.daily = donor.daily;
     }
 
+    const cleanName = (name) => name.replace('*', '');
+
     setWeatherData({
         city: location.name,
         region: location.admin1,
-        winner: { ...winner, conditionText: getWeatherText(winner.code) },
-        losers: ranked.slice(1)
+        winner: { ...winner, name: cleanName(winner.name), conditionText: getWeatherText(winner.code) },
+        losers: ranked.slice(1).map(l => ({...l, name: cleanName(l.name)}))
     });
-  };
-
-  // Helper för att plocka ut rätt daily-arrayer baserat på suffix
-  const extractDaily = (dailyObj, suffix) => {
-      if (!dailyObj) return { time: [] };
-      // Suffixet är tomt om parametern inte finns
-      if (!suffix) return { time: [] }; 
-      
-      return {
-          time: dailyObj.time || [],
-          code: dailyObj[`weather_code${suffix}`] || [],
-          max: dailyObj[`temperature_2m_max${suffix}`] || [],
-          min: dailyObj[`temperature_2m_min${suffix}`] || []
-      };
   };
 
   const handleShare = () => {
@@ -368,7 +331,6 @@ const WeatherApp = () => {
     setTimeout(() => setCopied(false), 3000);
   };
 
-  // Helper: Icons & Text
   const getWeatherIcon = (code, className = "w-6 h-6") => {
     if (code === 0) return <Sun className={`${className} text-yellow-500`} />;
     if (code <= 2) return <Cloud className={`${className} text-slate-400`} />; 
@@ -445,10 +407,6 @@ const WeatherApp = () => {
                 <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
                     <label className="text-[10px] text-orange-400 uppercase font-bold mb-1 block">Dela-text</label>
                     <textarea value={activeCopy.shareText} onChange={(e) => handleCopyUpdate('shareText', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:border-orange-500 focus:outline-none" rows="2" />
-                </div>
-                <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
-                    <label className="text-[10px] text-orange-400 uppercase font-bold mb-1 block">Underrubrik</label>
-                    <textarea value={activeCopy.subheadline} onChange={(e) => handleCopyUpdate('subheadline', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:border-orange-500 focus:outline-none" rows="2" />
                 </div>
             </div>
         </div>
@@ -527,7 +485,8 @@ const WeatherApp = () => {
                         <MapPin className="w-4 h-4 text-orange-500" />
                         {weatherData.city}
                     </div>
-                    <h2 className="text-5xl md:text-7xl font-extrabold text-slate-900 tracking-tight mb-4">
+                    {/* NYTT: Minskad textstorlek här */}
+                    <h2 className="text-3xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-3">
                         {activeCopy.resultTitle.replace('{winner}', weatherData.winner.name)}
                     </h2>
                      <p className="text-xl text-slate-500 font-medium">
@@ -652,5 +611,3 @@ const WeatherApp = () => {
 };
 
 export default WeatherApp;
-
-
