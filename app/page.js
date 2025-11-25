@@ -1,9 +1,17 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+// --- DEPLOY CHECK: Version 1.5 - Force Update ---
+// Om du läser detta har filen uppdaterats korrekt till Vercel.
+
+import React, { useState, useRef, useEffect } from 'react';
 import { Search, MapPin, Sun, Cloud, CloudRain, ArrowRight, CheckCircle, BarChart3, ChevronRight, Settings, Edit3, LocateFixed, Loader2, Snowflake, Trophy, Share2, Calendar, X } from 'lucide-react';
 
 const WeatherApp = () => {
+  // Debug log för att se att klienten körs
+  useEffect(() => {
+    console.log("Klarast.nu Client Component Mounted - Version 1.5");
+  }, []);
+
   // --- STATE ---
   const [viewState, setViewState] = useState('home'); 
   const [query, setQuery] = useState('');
@@ -22,7 +30,7 @@ const WeatherApp = () => {
   const [showAdmin, setShowAdmin] = useState(false);
   const [currentStyleId, setCurrentStyleId] = useState('poetic');
   
-  /// --- COPY DECK ---
+  // --- COPY DECK ---
   const [copyDeck, setCopyDeck] = useState({
     poetic: {
       id: 'poetic',
@@ -576,3 +584,5 @@ const WeatherApp = () => {
 };
 
 export default WeatherApp;
+
+
