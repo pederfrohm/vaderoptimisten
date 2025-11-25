@@ -3,7 +3,7 @@
 import React, { useState, useRef } from 'react';
 import { Search, MapPin, Sun, Cloud, CloudRain, Wind, ArrowRight, CheckCircle, BarChart3, ChevronRight, Settings, Edit3, LocateFixed, Loader2, Snowflake, Trophy, Share2, Calendar, X } from 'lucide-react';
 
-const WeatherAppDeployReady = () => {
+const WeatherApp = () => {
   // --- STATE ---
   const [viewState, setViewState] = useState('home'); 
   const [query, setQuery] = useState('');
@@ -575,5 +575,5 @@ const WeatherAppDeployReady = () => {
   );
 };
 
-export default WeatherAppDeployReady;
+export default WeatherApp;
 
