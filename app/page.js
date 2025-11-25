@@ -22,7 +22,7 @@ const WeatherApp = () => {
   const [showAdmin, setShowAdmin] = useState(false);
   const [currentStyleId, setCurrentStyleId] = useState('poetic');
   
-  // --- COPY DECK ---
+  /// --- COPY DECK ---
   const [copyDeck, setCopyDeck] = useState({
     poetic: {
       id: 'poetic',
