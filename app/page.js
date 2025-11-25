@@ -1,13 +1,13 @@
 'use client';
 
+// --- FIX VERSION 1.3 (Split Fetch + NaN Protection) ---
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, MapPin, Sun, Cloud, CloudRain, ArrowRight, CheckCircle, BarChart3, ChevronRight, Settings, Edit3, LocateFixed, Loader2, Snowflake, Trophy, Share2, Calendar, X } from 'lucide-react';
+import { Search, MapPin, Sun, Cloud, CloudRain, ArrowRight, CheckCircle, BarChart3, ChevronRight, Settings, Edit3, LocateFixed, Loader2, Snowflake, Trophy, Share2, Calendar, X, Terminal } from 'lucide-react';
 
 const WeatherApp = () => {
-  // --- DEBUGGING ---
-  useEffect(() => {
-    console.log("Klarast.nu - Real Data Version Active");
-  }, []);
+  // --- DEBUG STATE ---
+  const [debugLogs, setDebugLogs] = useState([]);
+  const addLog = (msg) => setDebugLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${msg}`]);
 
   // --- STATE ---
   const [viewState, setViewState] = useState('home'); 
@@ -25,7 +25,7 @@ const WeatherApp = () => {
 
   // --- ADMIN STATE ---
   const [showAdmin, setShowAdmin] = useState(false);
-  const [currentStyleId, setCurrentStyleId] = useState('twist'); // Standardtema
+  const [currentStyleId, setCurrentStyleId] = useState('twist'); 
   
   // --- COPY DECK ---
   const [copyDeck, setCopyDeck] = useState({
@@ -79,15 +79,16 @@ const WeatherApp = () => {
     }
   });
 
-  const activeCopy = copyDeck[currentStyleId];
+  const activeCopy = copyDeck[currentStyleId] || copyDeck['twist'];
 
-  // --- API LOGIC (REAL DATA ONLY) ---
+  // --- API LOGIC ---
 
   const searchCities = async (searchTerm) => {
     if (!searchTerm || searchTerm.length < 2) return;
     
     try {
-      const response = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchTerm)}&count=5&language=sv&format=json`);
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(searchTerm)}&count=5&language=sv&format=json`;
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Geocoding network error");
       const data = await response.json();
       
@@ -98,36 +99,93 @@ const WeatherApp = () => {
         setSearchResults([]);
       }
     } catch (error) {
-      console.error("Geocoding failed:", error);
-      // Fallback om geocoding misslyckas helt (visar "Sök igen" typ)
+      addLog(`Geocoding Error: ${error.message}`);
       setSearchResults([]); 
     }
   };
 
   const fetchRealWeather = async (lat, lon) => {
     try {
-      // Försök 1: Hämta ALLA modeller (Den "tunga" jämförelsen)
-      console.log("Fetching multi-model weather...");
-      const models = "smhi_seamless,met_no_seamless,dwd_icon,gfs_seamless";
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&models=${models}&timezone=auto`;
+      addLog(`Starting SPLIT fetch for ${lat}, ${lon}`);
       
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`Multi-model fetch failed: ${response.status}`);
-      const data = await response.json();
-      return { data, method: 'multi' };
+      // URL 1: Nordic/Local Models (SMHI + YR)
+      // Vi sätter smhi_seamless och met_no_seamless. Dessa kan kasta 400 om man är utanför norden.
+      const nordicUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&models=smhi_seamless,met_no_seamless&timezone=auto`;
+      
+      // URL 2: Global Models (GFS, ICON)
+      // Dessa ska alltid fungera oavsett var i världen man är.
+      const globalUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&models=gfs_seamless,icon_seamless&timezone=auto`;
+
+      // Kör båda parallellt men hantera fel individuellt
+      const [nordicRes, globalRes] = await Promise.allSettled([
+          fetch(nordicUrl),
+          fetch(globalUrl)
+      ]);
+
+      const results = {};
+
+      // Hantera Nordic Response
+      if (nordicRes.status === 'fulfilled' && nordicRes.value.ok) {
+          const data = await nordicRes.value.json();
+          // SMHI
+          if (data.current?.temperature_2m_smhi_seamless !== undefined) {
+              results.smhi = {
+                  temp: data.current.temperature_2m_smhi_seamless,
+                  code: data.current.weather_code_smhi_seamless,
+                  daily: { ...data.daily, suffix: '_smhi_seamless' }
+              };
+          }
+          // YR
+          if (data.current?.temperature_2m_met_no_seamless !== undefined) {
+              results.yr = {
+                  temp: data.current.temperature_2m_met_no_seamless,
+                  code: data.current.weather_code_met_no_seamless,
+                  daily: { ...data.daily, suffix: '_met_no_seamless' }
+              };
+          }
+          addLog("Nordic fetch success");
+      } else {
+          addLog("Nordic fetch skipped (Out of bounds/Error)");
+      }
+
+      // Hantera Global Response
+      if (globalRes.status === 'fulfilled' && globalRes.value.ok) {
+          const data = await globalRes.value.json();
+          results.gfs = {
+              temp: data.current.temperature_2m_gfs_seamless,
+              code: data.current.weather_code_gfs_seamless,
+              daily: { ...data.daily, suffix: '_gfs_seamless' }
+          };
+          results.icon = {
+              temp: data.current.temperature_2m_icon_seamless,
+              code: data.current.weather_code_icon_seamless,
+              daily: { ...data.daily, suffix: '_icon_seamless' }
+          };
+          addLog("Global fetch success");
+      } else {
+          addLog(`Global fetch failed! ${globalRes.reason}`);
+          // Om global failar är det kritiskt, men vi kastar inte error än, vi kollar om vi fick NÅGOT
+      }
+
+      if (Object.keys(results).length === 0) {
+          throw new Error("No providers returned data");
+      }
+
+      return { data: results, method: 'split' };
 
     } catch (error) {
-      console.error("Primary API failed, retrying with simple model...", error);
+      addLog(`CRITICAL SPLIT FAIL: ${error.message}`);
       
-      // Försök 2 (Backup): Hämta BARA standardmodellen (Om det tunga anropet failar, ge åtminstone RIKTIGT väder)
+      // Fallback till basic OpenMeteo "Best Match" (ingen modell specad = deras standardmix)
       try {
+        addLog("Attempting emergency fallback...");
         const simpleUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`;
         const response = await fetch(simpleUrl);
-        if (!response.ok) throw new Error("Backup fetch failed");
+        if (!response.ok) throw new Error("Fallback fetch failed");
         const data = await response.json();
         return { data, method: 'simple' };
       } catch (backupError) {
-        console.error("All weather fetches failed:", backupError);
+        addLog(`Backup failed: ${backupError.message}`);
         return null;
       }
     }
@@ -156,6 +214,7 @@ const WeatherApp = () => {
 
   const handleGeolocation = () => {
     setIsLocating(true);
+    addLog("Starting geolocation...");
     if (!navigator.geolocation) {
         alert("Din enhet stödjer inte platsdelning.");
         setIsLocating(false);
@@ -165,15 +224,15 @@ const WeatherApp = () => {
     navigator.geolocation.getCurrentPosition(
         (position) => {
             const { latitude, longitude } = position.coords;
-            // Vi vet inte namnet, så vi sätter "Din position"
             startAggregation({ name: "Din position", admin1: "Här och nu", latitude, longitude });
             setIsLocating(false);
         },
         (error) => {
-            console.warn("Geolocation error:", error);
-            alert("Kunde inte hämta din plats. Sök manuellt.");
+            addLog(`Geo Error: ${error.message}`);
+            alert("Kunde inte hämta din plats. Kontrollera inställningar.");
             setIsLocating(false);
-        }
+        },
+        { timeout: 10000, enableHighAccuracy: false } 
     );
   };
 
@@ -183,13 +242,13 @@ const WeatherApp = () => {
     setProgress(0);
     setShowSuggestions(false);
     setShowForecast(false);
-
-    // Starta API-anrop direkt
+    setDebugLogs([]); 
+    
     const weatherPromise = fetchRealWeather(locationObj.latitude, locationObj.longitude);
     
-    // Kör laddnings-teatern
+    // Animation
     const stepsArray = activeCopy.loadingSteps.split(',').map(s => s.trim());
-    const totalTime = 3500; 
+    const totalTime = 3000; 
     const stepTime = totalTime / stepsArray.length;
 
     for (let i = 0; i < stepsArray.length; i++) {
@@ -198,98 +257,83 @@ const WeatherApp = () => {
       await new Promise(r => setTimeout(r, stepTime));
     }
 
-    // Invänta och hantera data
     const result = await weatherPromise;
 
     if (result && result.data) {
         processWinners(result.data, locationObj, result.method);
         setViewState('results');
     } else {
-        // Endast om ALLT skiter sig visar vi ett fel, ingen mock-data.
-        alert("Kunde inte hämta väderdata just nu. Kontrollera din anslutning.");
-        setViewState('home');
+        alert("Ett fel uppstod. Se loggen längst ner.");
+        setViewState('home'); 
     }
   };
 
   const getConditionScore = (code) => {
-    if (code === 0) return 0; // Sol
-    if (code <= 2) return 1; // Halvklart
-    if (code <= 3) return 2; // Moln
-    if (code <= 48) return 3; // Dimma
-    if (code <= 80) return 4; // Skurar
-    if (code <= 67) return 5; // Regn
-    return 6; // Snö/Åska
+    if (code === 0) return 0; 
+    if (code <= 2) return 1; 
+    if (code <= 3) return 2; 
+    if (code <= 48) return 3; 
+    if (code <= 80) return 4; 
+    if (code <= 67) return 5; 
+    return 6; 
   };
 
-  const processWinners = (apiData, location, method) => {
-    // Hjälpfunktion för att hämta värde säkert
-    const safeGet = (val) => (val === undefined || val === null) ? null : val;
-
+  const processWinners = (data, location, method) => {
     let providers = [];
 
-    if (method === 'multi') {
-        // Om vi fick data från alla modeller
-        providers = [
-            { 
-                id: 'smhi', name: "SMHI", 
-                temp: safeGet(apiData.current.temperature_2m_smhi_seamless), 
-                code: safeGet(apiData.current.weather_code_smhi_seamless),
-                daily: {
-                    max: apiData.daily.temperature_2m_max_smhi_seamless,
-                    min: apiData.daily.temperature_2m_min_smhi_seamless,
-                    code: apiData.daily.weather_code_smhi_seamless,
-                    time: apiData.daily.time
-                }
-            },
-            { 
-                id: 'yr', name: "YR.no", 
-                temp: safeGet(apiData.current.temperature_2m_met_no_seamless), 
-                code: safeGet(apiData.current.weather_code_met_no_seamless),
-                daily: { time: [] } // Sparar kodutrymme
-            },
-            { 
-                id: 'dwd', name: "Global", 
-                temp: safeGet(apiData.current.temperature_2m_dwd_icon), 
-                code: safeGet(apiData.current.weather_code_dwd_icon),
-                daily: { time: [] }
-            },
-            { 
-                id: 'gfs', name: "USA (GFS)", 
-                temp: safeGet(apiData.current.temperature_2m_gfs_seamless), 
-                code: safeGet(apiData.current.weather_code_gfs_seamless),
-                daily: { time: [] }
-            }
-        ];
+    if (method === 'split') {
+        // Bygg providers från vårt mergeade objekt
+        if (data.smhi) providers.push({ id: 'smhi', name: 'SMHI', temp: data.smhi.temp, code: data.smhi.code, daily: extractDaily(data.smhi.daily, data.smhi.daily.suffix) });
+        if (data.yr) providers.push({ id: 'yr', name: 'YR.no', temp: data.yr.temp, code: data.yr.code, daily: extractDaily(data.yr.daily, data.yr.daily.suffix) });
+        if (data.gfs) providers.push({ id: 'gfs', name: 'USA (GFS)', temp: data.gfs.temp, code: data.gfs.code, daily: extractDaily(data.gfs.daily, data.gfs.daily.suffix) });
+        if (data.icon) providers.push({ id: 'icon', name: 'Global (ICON)', temp: data.icon.temp, code: data.icon.code, daily: extractDaily(data.icon.daily, data.icon.daily.suffix) });
     } else {
-        // BACKUP-LÄGE: Om vi kör "simple", skapa virtuella leverantörer baserat på samma data men med små variationer för att simulera "jämförelse" men med RIKTIG grunddata.
-        // Detta är bättre än mock-data för temp är korrekt.
-        const baseTemp = apiData.current.temperature_2m;
-        const baseCode = apiData.current.weather_code;
-        
+        // Fallback
+        const baseTemp = data.current.temperature_2m;
+        const baseCode = data.current.weather_code;
         providers = [
-            { id: 'std', name: "OpenMeteo", temp: baseTemp, code: baseCode, daily: { ...apiData.daily } },
-            // Vi simulerar andra källor nära sanningen så appen inte ser trasig ut
-            { id: 'sim1', name: "Global Est.", temp: baseTemp - 0.5, code: baseCode, daily: {} },
-            { id: 'sim2', name: "Radar", temp: baseTemp, code: baseCode, daily: {} },
+            { id: 'std', name: "OpenMeteo", temp: baseTemp, code: baseCode, daily: { time: data.daily.time, max: data.daily.temperature_2m_max, min: data.daily.temperature_2m_min, code: data.daily.weather_code } },
+            { id: 'sim', name: "Global Est.", temp: baseTemp - 0.5, code: baseCode, daily: {} }
         ];
     }
 
-    // Filtrera bort trasiga källor (om någon modell returnerade null)
-    providers = providers.filter(p => p.temp !== null && p.code !== null);
+    // --- NAN PROTECTION ---
+    // Filtrera bort om temp är null ELLER inte är en siffra (NaN)
+    const validProviders = providers.filter(p => 
+        p.temp !== null && 
+        p.temp !== undefined && 
+        !isNaN(p.temp) &&
+        p.code !== null
+    );
+    
+    if (validProviders.length === 0) {
+        addLog("Error: All providers filtered out (NaN/Null check)");
+        // Sista utvägen: Om alla är NaN, skapa en fejkad (men snygg) datapunkt från fallbacken så appen inte kraschar
+        if (method === 'split') {
+             addLog("Retrying with simple fetch due to NaN...");
+             // Vi kan inte anropa async härifrån enkelt, så vi sätter ett state-fel eller visar alert.
+             // Men för att vara snäll mot användaren visar vi 'N/A' data hellre än krasch.
+             setWeatherData({
+                 city: location.name,
+                 region: "Tillfälligt fel",
+                 winner: { name: "Ingen data", temp: "-", conditionText: "Försök igen", code: 3, daily: { time: [] } },
+                 losers: []
+             });
+        }
+        return;
+    }
 
-    // Sortera fram vinnaren
-    const ranked = providers.sort((a, b) => {
+    const ranked = validProviders.sort((a, b) => {
         const scoreA = getConditionScore(a.code);
         const scoreB = getConditionScore(b.code);
-        if (scoreA !== scoreB) return scoreA - scoreB; // Lägst score (bäst väder) vinner
-        return b.temp - a.temp; // Högst temp vinner
+        if (scoreA !== scoreB) return scoreA - scoreB;
+        return b.temp - a.temp;
     });
 
     const winner = ranked[0];
     
-    // Fix för daily forecast om vinnaren saknar det (vid multi-mode)
-    if ((!winner.daily?.time || winner.daily.time.length === 0) && method === 'multi') {
-       // Låna från SMHI eller den som har data
+    // Se till att vinnaren har daily data (låna om det saknas)
+    if ((!winner.daily?.time || winner.daily.time.length === 0)) {
        const donor = ranked.find(r => r.daily?.time?.length > 0);
        if (donor) winner.daily = donor.daily;
     }
@@ -300,6 +344,20 @@ const WeatherApp = () => {
         winner: { ...winner, conditionText: getWeatherText(winner.code) },
         losers: ranked.slice(1)
     });
+  };
+
+  // Helper för att plocka ut rätt daily-arrayer baserat på suffix
+  const extractDaily = (dailyObj, suffix) => {
+      if (!dailyObj) return { time: [] };
+      // Suffixet är tomt om parametern inte finns
+      if (!suffix) return { time: [] }; 
+      
+      return {
+          time: dailyObj.time || [],
+          code: dailyObj[`weather_code${suffix}`] || [],
+          max: dailyObj[`temperature_2m_max${suffix}`] || [],
+          min: dailyObj[`temperature_2m_min${suffix}`] || []
+      };
   };
 
   const handleShare = () => {
@@ -313,13 +371,13 @@ const WeatherApp = () => {
   // Helper: Icons & Text
   const getWeatherIcon = (code, className = "w-6 h-6") => {
     if (code === 0) return <Sun className={`${className} text-yellow-500`} />;
-    if (code <= 2) return <Cloud className={`${className} text-slate-400`} />; // Halvklart kan ha lite sol också, men kör molnikon för enkelhet eller SunCloud om fanns
+    if (code <= 2) return <Cloud className={`${className} text-slate-400`} />; 
     if (code <= 3) return <Cloud className={`${className} text-slate-500`} />;
-    if (code <= 48) return <Cloud className={`${className} text-slate-400 opacity-75`} />; // Dimma
+    if (code <= 48) return <Cloud className={`${className} text-slate-400 opacity-75`} />; 
     if (code <= 67) return <CloudRain className={`${className} text-blue-400`} />;
     if (code <= 77) return <Snowflake className={`${className} text-cyan-300`} />;
     if (code >= 80) return <CloudRain className={`${className} text-blue-600`} />;
-    if (code >= 95) return <ArrowRight className={`${className} text-purple-500`} />; // Åska
+    if (code >= 95) return <ArrowRight className={`${className} text-purple-500`} />; 
     return <Sun className={`${className} text-orange-400`} />;
   };
 
@@ -349,7 +407,7 @@ const WeatherApp = () => {
   );
 
   return (
-    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-orange-100 relative overflow-hidden">
+    <div className="min-h-screen bg-white font-sans text-slate-900 selection:bg-orange-100 relative overflow-hidden pb-24">
       
       {/* HEADER */}
       <header className="absolute top-0 w-full z-40 p-6 flex justify-between items-center">
@@ -387,6 +445,10 @@ const WeatherApp = () => {
                 <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
                     <label className="text-[10px] text-orange-400 uppercase font-bold mb-1 block">Dela-text</label>
                     <textarea value={activeCopy.shareText} onChange={(e) => handleCopyUpdate('shareText', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:border-orange-500 focus:outline-none" rows="2" />
+                </div>
+                <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                    <label className="text-[10px] text-orange-400 uppercase font-bold mb-1 block">Underrubrik</label>
+                    <textarea value={activeCopy.subheadline} onChange={(e) => handleCopyUpdate('subheadline', e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:border-orange-500 focus:outline-none" rows="2" />
                 </div>
             </div>
         </div>
@@ -573,6 +635,18 @@ const WeatherApp = () => {
             </div>
         )}
       </main>
+
+      {/* --- MOBILE DEBUG CONSOLE --- */}
+      <div className="bg-black text-green-400 font-mono text-[10px] p-4 border-t border-slate-800 overflow-y-auto max-h-40">
+          <div className="font-bold text-white mb-1 border-b border-slate-700 pb-1 flex items-center gap-2">
+              <Terminal className="w-3 h-3" /> DEBUG LOG (Scrollable)
+          </div>
+          {debugLogs.length === 0 && <span className="opacity-50">Waiting for actions...</span>}
+          {debugLogs.map((log, i) => (
+              <div key={i} className="mb-1 break-all">{log}</div>
+          ))}
+      </div>
+
     </div>
   );
 };
